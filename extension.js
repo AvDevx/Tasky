@@ -97,47 +97,61 @@ function activate(context) {
         vscode.commands.executeCommand('markdown.showPreviewToSide');
 
         // Add current date heading if not present
-        await addCurrentDateHeading(editor);
+        await moveIncompleteChecklistsToCurrentDate(editor);
     });
 
     context.subscriptions.push(addNoteCommand);
     context.subscriptions.push(openNoteCommand);
 }
 
-async function addCurrentDateHeading(editor) {
+// async function addCurrentDateHeading(editor) {
+//     const today = new Date();
+//     const formattedDate = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).format(today); // Format: 12 July 2024
+//     const dateHeading = `\n### ${formattedDate}\n`;
+//     const checkbox = `- [ ] What's for today?\n`;
+
+//     const document = editor.document;
+//     const text = document.getText();
+//     const lines = text.split('\n');
+
+//     let currentDateIndex = -1;
+
+//     // Find the index of the current date heading
+//     for (let i = 0; i < lines.length; i++) {
+//         if (lines[i].startsWith('### ')) {
+//             const headingDate = lines[i].substring(4).trim();
+//             if (headingDate === formattedDate) {
+//                 currentDateIndex = i;
+//                 break;
+//             }
+//         }
+//     }
+
+//     // Add current date heading and checkbox if not present
+//     if (currentDateIndex === -1) {
+//         const position = document.positionAt(text.length); // End of the document
+//         const edit = new vscode.WorkspaceEdit();
+//         edit.insert(document.uri, position, `\n${dateHeading}${checkbox}`);
+//         await vscode.workspace.applyEdit(edit);
+//     }
+
+//     // Move incomplete checklists from previous dates to the current date
+//     await moveIncompleteChecklistsToCurrentDate(editor);
+// }
+
+async function moveIncompleteChecklistsToCurrentDate(editor) {
     const today = new Date();
     const formattedDate = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).format(today); // Format: 12 July 2024
     const dateHeading = `### ${formattedDate}\n`;
     const checkbox = `- [ ] What's for today?\n`;
 
     const document = editor.document;
-    const text = document.getText();
-
-    // Add current date heading and checkbox if not present
-    if (!text.includes(dateHeading)) {
-        const position = document.positionAt(text.length); // End of the document
-        const edit = new vscode.WorkspaceEdit();
-        edit.insert(document.uri, position, `\n${dateHeading}${checkbox}`);
-        await vscode.workspace.applyEdit(edit);
-    }
-
-    // Move incomplete checklists from previous dates to the current date
-    await moveIncompleteChecklistsToCurrentDate(editor);
-}
-
-async function moveIncompleteChecklistsToCurrentDate(editor) {
-    const today = new Date();
-    const formattedDate = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).format(today); // Format: 12 July 2024
-    const dateHeading = `### ${formattedDate}\n`;
-
-    const document = editor.document;
-    const text = document.getText();
-    const lines = text.split('\n');
+    let text = document.getText();
+    let lines = text.split('\n');
 
     let currentDateIndex = -1;
     let previousDateIndex = -1;
     let incompleteChecklists = [];
-    let updatedLines = [...lines]; // Create a copy of lines to modify
 
     // Find the index of the current date heading and previous date headings
     for (let i = 0; i < lines.length; i++) {
@@ -152,7 +166,16 @@ async function moveIncompleteChecklistsToCurrentDate(editor) {
     }
 
     if (currentDateIndex === -1) {
-        return; // Current date heading not found
+        // Insert the current date heading if not present
+        const position = document.positionAt(text.length); // End of the document
+        const edit = new vscode.WorkspaceEdit();
+        edit.insert(document.uri, position, `\n\n${dateHeading}${checkbox}`);
+        await vscode.workspace.applyEdit(edit);
+
+        // Re-fetch the document content after insertion
+        const updatedDocument = await vscode.workspace.openTextDocument(document.uri);
+        text = updatedDocument.getText();
+        lines = text.split('\n');
     }
 
     // Collect incomplete checklists from previous dates and remove them
@@ -163,29 +186,33 @@ async function moveIncompleteChecklistsToCurrentDate(editor) {
             }
             if (lines[i].startsWith('- [ ]')) {
                 incompleteChecklists.push(lines[i]);
-                updatedLines[i] = ''; // Remove the checklist item from the original location
+                lines[i] = ''; // Remove the checklist item from the original location
             }
         }
     }
 
-    // Add incomplete checklists to the current date heading
-    if (incompleteChecklists.length > 0) {
-        const position = document.positionAt(text.length); // End of the document
-        const edit = new vscode.WorkspaceEdit();
-        edit.insert(document.uri, position, `\n${dateHeading}${incompleteChecklists.join('\n')}`);
-        await vscode.workspace.applyEdit(edit);
-        
-        // Remove empty lines from updatedLines
-        updatedLines = updatedLines.filter(line => line !== '');
-
-        // Update the document with the cleaned lines
-        const updatedText = updatedLines.join('\n');
-        const textEdit = new vscode.WorkspaceEdit();
-        textEdit.replace(document.uri, new vscode.Range(0, 0, lines.length, 0), updatedText);
-        await vscode.workspace.applyEdit(textEdit);
+    // Ensure a blank line before the new heading if it does not already exist
+    if (!lines.includes(dateHeading.trim())) {
+        lines.push(dateHeading.trim());
+        lines.push(checkbox.trim());
+    } else {
+        // Add the incomplete checklists to the current date heading
+        const currentDateHeadingIndex = lines.indexOf(dateHeading.trim());
+        if (currentDateHeadingIndex !== -1) {
+            lines.splice(currentDateHeadingIndex + 1, 0, ...incompleteChecklists);
+        }
     }
 
-    // Save document after updating
+    // Remove empty lines
+    lines = lines.filter(line => line.trim() !== '');
+
+    // Update the document content
+    const updatedText = lines.join('\n');
+    const edit = new vscode.WorkspaceEdit();
+    edit.replace(document.uri, new vscode.Range(0, 0, lines.length, 0), updatedText);
+    await vscode.workspace.applyEdit(edit);
+
+    // Save the document after updating
     await document.save();
 }
 

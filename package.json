@@ -1,0 +1,50 @@
+{
+  "name": "tasky",
+  "displayName": "tasky",
+  "description": "A todo list for distributed projects",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [{
+      "command": "tasky.helloWorld",
+      "title": "Hello World"
+    },
+    {
+      "command": "tasky.createNote",
+      "title": "Tasky: Create Note"
+    },
+    {
+      "command": "tasky.showNotes",
+      "title": "Show Notes"
+    },
+    {
+      "command": "tasky.addLocalProjectsToNote",
+      "title": "Add Local Projects to Note"
+    },
+    {
+      "command": "tasky.openNoteManager",
+      "title": "Open Note Manager"
+    }
+  ]
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "pretest": "npm run lint",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.92.0",
+    "@types/mocha": "^10.0.7",
+    "@types/node": "20.x",
+    "eslint": "^9.9.1",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1"
+  }
+}

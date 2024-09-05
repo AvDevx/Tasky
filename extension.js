@@ -6,152 +6,90 @@ const path = require('path');
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
-
     console.log('Congratulations, your extension "tasky" is now active!');
 
-    // Register the command to open the note manager UI
-    const openNoteManagerCommand = vscode.commands.registerCommand('tasky.openNoteManager', function () {
-        const panel = vscode.window.createWebviewPanel(
-            'noteManager', // Identifies the type of the webview. Used internally
-            'Note Manager', // Title of the panel displayed to the user
-            vscode.ViewColumn.One, // Editor column to show the new webview panel in
-            {
-                enableScripts: true // Enable scripts in the webview
+    // Register the command "addNote"
+    const addNoteCommand = vscode.commands.registerCommand('tasky.addNote', async function () {
+        // Prompt the user for the note name
+        const noteName = await vscode.window.showInputBox({
+            prompt: 'Enter the note name',
+            validateInput: (input) => {
+                // Validate that the note name is not empty
+                return input.trim() === '' ? 'Note name cannot be empty' : null;
             }
-        );
+        });
 
-        // Set the HTML content for the webview
-        panel.webview.html = getWebviewContent(context);
+        // If no note name was provided, exit the function
+        if (!noteName) {
+            return;
+        }
 
-        // Handle messages from the webview
-        panel.webview.onDidReceiveMessage(
-            async message => {
-                const notesFolderPath = path.join(context.storageUri.fsPath, 'notes');
+        // Define the folder for storing notes
+        const notesFolderPath = path.join(context.globalStorageUri.fsPath, 'notes');
 
-                switch (message.command) {
-                    case 'createNote':
-                        const noteContent = message.text;
-                        if (noteContent) {
-                            if (!fs.existsSync(notesFolderPath)) {
-                                fs.mkdirSync(notesFolderPath, { recursive: true });
-                            }
-                            const noteFilePath = path.join(notesFolderPath, `note-${Date.now()}.txt`);
-                            fs.writeFileSync(noteFilePath, noteContent, 'utf8');
-                            vscode.window.showInformationMessage('Note created successfully!');
-                        }
-                        break;
-                    case 'deleteNote':
-                        const noteToDelete = path.join(notesFolderPath, message.fileName);
-                        if (fs.existsSync(noteToDelete)) {
-                            fs.unlinkSync(noteToDelete);
-                            vscode.window.showInformationMessage(`Note "${message.fileName}" deleted successfully!`);
-                        }
-                        break;
-                    case 'listNotes':
-                        if (fs.existsSync(notesFolderPath)) {
-                            const files = fs.readdirSync(notesFolderPath);
-                            panel.webview.postMessage({ command: 'showNotes', notes: files });
-                        }
-                        break;
-                }
-            },
-            undefined,
-            context.subscriptions
-        );
+        // Ensure the notes folder exists
+        if (!fs.existsSync(notesFolderPath)) {
+            fs.mkdirSync(notesFolderPath, { recursive: true });
+        }
+
+        // Define the path for the new note file
+        const noteFilePath = path.join(notesFolderPath, `${noteName}.txt`);
+
+        // Check if a note with the same name already exists
+        if (fs.existsSync(noteFilePath)) {
+            vscode.window.showErrorMessage(`A note with the name "${noteName}" already exists.`);
+            return;
+        }
+
+        // Create the new note file
+        fs.writeFileSync(noteFilePath, '', 'utf8');
+        vscode.window.showInformationMessage(`Note "${noteName}" created successfully!`);
+
+        // Open the newly created note in the editor
+        const document = await vscode.workspace.openTextDocument(noteFilePath);
+        await vscode.window.showTextDocument(document);
     });
 
-    context.subscriptions.push(openNoteManagerCommand);
-}
+    // Register the command "openNote"
+    const openNoteCommand = vscode.commands.registerCommand('tasky.openNote', async function () {
+        // Define the folder for storing notes
+        const notesFolderPath = path.join(context.globalStorageUri.fsPath, 'notes');
 
-function getWebviewContent(context) {
-    return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Note Manager</title>
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                padding: 10px;
-            }
-            .note-container {
-                display: flex;
-                flex-direction: column;
-                gap: 10px;
-            }
-            .note {
-                border: 1px solid #ddd;
-                padding: 8px;
-                border-radius: 4px;
-            }
-            button {
-                padding: 8px 12px;
-                background-color: #007acc;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-            }
-            button:hover {
-                background-color: #005fa3;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>Note Manager</h1>
-        <div>
-            <textarea id="note-input" rows="4" cols="50" placeholder="Type your note here..."></textarea>
-            <br/>
-            <button onclick="createNote()">Create Note</button>
-        </div>
-        <hr/>
-        <h2>Your Notes</h2>
-        <div id="notes-list" class="note-container"></div>
+        // Check if the notes folder exists
+        if (!fs.existsSync(notesFolderPath)) {
+            vscode.window.showInformationMessage('No notes found. Please create a note first.');
+            return;
+        }
 
-        <script>
-            const vscode = acquireVsCodeApi();
+        // Read all note files from the notes folder
+        const noteFiles = fs.readdirSync(notesFolderPath).filter(file => file.endsWith('.txt'));
 
-            function createNote() {
-                const noteContent = document.getElementById('note-input').value;
-                vscode.postMessage({ command: 'createNote', text: noteContent });
-                document.getElementById('note-input').value = '';
-                loadNotes();
-            }
+        // If no notes are available, show a message
+        if (noteFiles.length === 0) {
+            vscode.window.showInformationMessage('No notes found. Please create a note first.');
+            return;
+        }
 
-            function deleteNote(fileName) {
-                vscode.postMessage({ command: 'deleteNote', fileName: fileName });
-                loadNotes();
-            }
+        // Show a Quick Pick to select a note
+        const selectedNote = await vscode.window.showQuickPick(noteFiles, {
+            placeHolder: 'Select a note to open'
+        });
 
-            function loadNotes() {
-                vscode.postMessage({ command: 'listNotes' });
-            }
+        // If no note was selected, exit the function
+        if (!selectedNote) {
+            return;
+        }
 
-            window.addEventListener('message', event => {
-                const message = event.data;
-                if (message.command === 'showNotes') {
-                    const notesList = document.getElementById('notes-list');
-                    notesList.innerHTML = '';
-                    message.notes.forEach(note => {
-                        const noteElement = document.createElement('div');
-                        noteElement.className = 'note';
-                        noteElement.textContent = note;
-                        const deleteButton = document.createElement('button');
-                        deleteButton.textContent = 'Delete';
-                        deleteButton.onclick = () => deleteNote(note);
-                        noteElement.appendChild(deleteButton);
-                        notesList.appendChild(noteElement);
-                    });
-                }
-            });
+        // Define the path for the selected note file
+        const noteFilePath = path.join(notesFolderPath, selectedNote);
 
-            // Load notes when the UI loads
-            loadNotes();
-        </script>
-    </body>
-    </html>`;
+        // Open the selected note in the editor
+        const document = await vscode.workspace.openTextDocument(noteFilePath);
+        await vscode.window.showTextDocument(document);
+    });
+
+    context.subscriptions.push(addNoteCommand);
+    context.subscriptions.push(openNoteCommand);
 }
 
 function deactivate() {}

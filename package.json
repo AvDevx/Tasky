@@ -13,25 +13,13 @@
   "main": "./extension.js",
   "contributes": {
     "commands": [{
-      "command": "tasky.helloWorld",
-      "title": "Hello World"
-    },
-    {
-      "command": "tasky.createNote",
-      "title": "Tasky: Create Note"
-    },
-    {
-      "command": "tasky.showNotes",
-      "title": "Show Notes"
-    },
-    {
-      "command": "tasky.addLocalProjectsToNote",
-      "title": "Add Local Projects to Note"
-    },
-    {
-      "command": "tasky.openNoteManager",
-      "title": "Open Note Manager"
-    }
+      "command": "tasky.addNote",
+      "title": "Add Note"
+  },
+  {
+      "command": "tasky.openNote",
+      "title": "Open Note"
+  }
   ]
   },
   "scripts": {

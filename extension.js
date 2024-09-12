@@ -108,10 +108,15 @@ function activate(context) {
                     ]
                 };
                 noteData.notes.push(newNoteEntry);
-
-                // Save the updated notes back to the JSON file
-                fs.writeFileSync(noteFilePath, JSON.stringify(noteData, null, 2), 'utf8');
             }
+
+            // Remove any items with empty text
+            noteData.notes.forEach(note => {
+                note.items = note.items.filter(item => item.text.trim() !== '');
+            });
+
+            // Save the updated notes back to the JSON file
+            fs.writeFileSync(noteFilePath, JSON.stringify(noteData, null, 2), 'utf8');
 
             openNotesWebview(context, noteData, path.basename(selectedNoteFile, '.json'));
         } catch (error) {
@@ -127,7 +132,7 @@ function activate(context) {
 function openNotesWebview(context, noteData, noteTitle) {
     const panel = vscode.window.createWebviewPanel(
         'noteManager',
-        `Note Manager - ${noteTitle}`,
+        `Note Manager: ${noteTitle}`,
         vscode.ViewColumn.One,
         {
             enableScripts: true
@@ -168,7 +173,7 @@ function toggleItemCompletion(noteData, noteIndex, itemIndex) {
 // Function to edit the text of a checklist item
 function editItem(noteData, noteIndex, itemIndex, newText) {
     const item = noteData.notes[noteIndex].items[itemIndex];
-    item.text = newText;
+    item.text = newText.trim(); // Trim whitespace from both sides
 }
 
 // Function to add a new checklist item
@@ -195,29 +200,38 @@ function getWebviewContent(noteData) {
         return new Date(dateString).toLocaleDateString(undefined, options);
     };
 
-    let notesHtml = noteData.notes.map((note, noteIndex) => `
+    let notesHtml = noteData.notes.map((note, noteIndex) => {
+        return `
         <h3>${formatDate(note.date)}</h3>
         <ul>
-            ${note.items.map((item, itemIndex) => `
-                <li style="display: flex; flex-direction: column; align-items: flex-start;">
-                    <input type="checkbox" ${item.completed ? 'checked' : ''} 
-                        onchange="toggleComplete(${noteIndex}, ${itemIndex})" 
-                        style="margin-right: 8px; margin-bottom: 4px;"> 
-                    <textarea 
-                        oninput="autoResize(this)" 
-                        onblur="editItem(${noteIndex}, ${itemIndex}, this.value)" 
-                        style="width: 100%; height: auto; resize: none; overflow: hidden; background: transparent; border: none; outline: none; color: white; margin-bottom: 4px;">
-                        ${item.text}
-                    </textarea>
-                    <div style="color: gray;">
-                        ${item.added_at ? `Added: ${formatDate(item.added_at)}<br>` : ''}
+            ${note.items.map((item, itemIndex) => {
+                const itemId = `item-text-${noteIndex}-${itemIndex}`;
+                return `
+                <li style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 20px">
+                    <div style="display: flex; align-items: flex-start">
+                        <label class="custom-checkbox">
+                            <input type="checkbox" ${item.completed ? 'checked' : ''} 
+                                onchange="toggleComplete(${noteIndex}, ${itemIndex})">
+                            <span class="checkmark"></span>
+                        </label>
+                        <div 
+                            id="${itemId}" 
+                            contenteditable="true" 
+                            onblur="saveItem(${noteIndex}, ${itemIndex})"
+                            class="item-text ${item.completed ? 'completed' : ''}"
+                        >${item.text}</div>
+                    </div>
+                    <div style="color: gray; padding-left:30px">
+                        ${item.added_at ? `Added: ${formatDate(item.added_at)}` : ''}
                         ${item.closed_at ? `Closed: ${formatDate(item.closed_at)}` : ''}
                     </div>
                 </li>
-            `).join('')}
+                `;
+            }).join('')}
         </ul>
         <button onclick="addItem(${noteIndex})">+ Add Item</button>
-    `).join('');
+        `;
+    }).join('');
 
     return `
     <!DOCTYPE html>
@@ -232,9 +246,9 @@ function getWebviewContent(noteData) {
             h3 { margin-top: 20px; font-size: 1.2em; }
             ul { list-style-type: none; padding: 0; }
             li { margin-bottom: 5px; display: flex; flex-direction: column; align-items: flex-start; }
-            textarea { 
+            div[contenteditable="true"] { 
                 width: 100%; 
-                height: auto; 
+                min-height: 20px; 
                 resize: none; 
                 overflow: hidden; 
                 background: transparent; 
@@ -245,6 +259,8 @@ function getWebviewContent(noteData) {
                 padding: 5px;
                 color: white; /* Text color */
                 margin-bottom: 4px;
+                white-space: pre-wrap; /* Preserve white spaces */
+                overflow-wrap: break-word; /* Ensure words break appropriately */
             }
             button {
                 margin-top: 10px;
@@ -257,6 +273,40 @@ function getWebviewContent(noteData) {
             }
             button:hover {
                 background-color: #005f99;
+            }
+            /* Custom Checkbox Styles */
+            .custom-checkbox {
+                display: inline-block;
+                position: relative;
+                width: 20px;
+                height: 20px;
+                margin-right: 8px;
+            }
+            .custom-checkbox input {
+                opacity: 0;
+                position: absolute;
+                cursor: pointer;
+                height: 0;
+                width: 0;
+            }
+            .custom-checkbox .checkmark {
+                position: absolute;
+                top: 0;
+                left: 0;
+                height: 12px;
+                width: 12px;
+                background-color: #f0f0f0;
+                border-radius: 4px; /* Makes the checkbox round */
+                margin-top: 6px;
+                transition: background-color 0.3s;
+            }
+            .custom-checkbox input:checked + .checkmark {
+                background-color: #007acc; /* Change color when checked */
+            }
+            /* Completed Item Styling */
+            .item-text.completed {
+                text-decoration: line-through; /* Strike-through effect */
+                color: #b0b0b0; /* Optional: change color to indicate completion */
             }
         </style>
     </head>
@@ -273,15 +323,26 @@ function getWebviewContent(noteData) {
                     noteIndex: noteIndex,
                     itemIndex: itemIndex
                 });
+                // Update the class to reflect completion state
+                const itemDiv = document.getElementById('item-text-' + noteIndex + '-' + itemIndex);
+                itemDiv.classList.toggle('completed');
             }
 
-            function editItem(noteIndex, itemIndex, newText) {
-                vscode.postMessage({
-                    command: 'editItem',
-                    noteIndex: noteIndex,
-                    itemIndex: itemIndex,
-                    newText: newText.trim()
-                });
+            function saveItem(noteIndex, itemIndex) {
+                const itemDiv = document.getElementById('item-text-' + noteIndex + '-' + itemIndex);
+                if (!itemDiv) {
+                    console.error('Item div not found: item-text-' + noteIndex + '-' + itemIndex);
+                    return;
+                }
+                const newText = itemDiv.innerText.trim();
+                if (newText !== '') {
+                    vscode.postMessage({
+                        command: 'editItem',
+                        noteIndex: noteIndex,
+                        itemIndex: itemIndex,
+                        newText: newText
+                    });
+                }
             }
 
             function addItem(noteIndex) {
@@ -290,18 +351,16 @@ function getWebviewContent(noteData) {
                     noteIndex: noteIndex
                 });
             }
-
-            function autoResize(textarea) {
-                textarea.style.height = 'auto';
-                textarea.style.height = (textarea.scrollHeight) + 'px';
-            }
         </script>
     </body>
     </html>
     `;
 }
 
-// Deactivate function (optional, typically empty)
+
+
+
+
 function deactivate() {}
 
 module.exports = {

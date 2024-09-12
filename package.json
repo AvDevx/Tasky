@@ -12,15 +12,16 @@
   "activationEvents": [],
   "main": "./extension.js",
   "contributes": {
-    "commands": [{
-      "command": "tasky.addNote",
-      "title": "Add Note"
-  },
-  {
-      "command": "tasky.openNote",
-      "title": "Open Note"
-  }
-  ]
+    "commands": [
+      {
+        "command": "tasky.addNote",
+        "title": "Add Note"
+      },
+      {
+        "command": "tasky.openNote",
+        "title": "Open Note"
+      }
+    ]
   },
   "scripts": {
     "lint": "eslint .",
@@ -28,11 +29,14 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.92.0",
     "@types/mocha": "^10.0.7",
     "@types/node": "20.x",
-    "eslint": "^9.9.1",
+    "@types/vscode": "^1.92.0",
     "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.4.1"
+    "@vscode/test-electron": "^2.4.1",
+    "eslint": "^9.9.1"
+  },
+  "dependencies": {
+    "uuid": "^10.0.0"
   }
 }

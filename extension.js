@@ -1,6 +1,7 @@
 const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
+const { v4: uuidv4 } = require('uuid');
 
 /**
  * @param {vscode.ExtensionContext} context
@@ -8,216 +9,299 @@ const path = require('path');
 function activate(context) {
     console.log('Congratulations, your extension "tasky" is now active!');
 
-    // Register the command "addNote"
+    // Define the directory for storing JSON files
+    const notesDir = path.join(context.globalStorageUri.fsPath, 'notes');
+    if (!fs.existsSync(notesDir)) {
+        fs.mkdirSync(notesDir, { recursive: true });
+    }
+
+    // Command to add a new note
     const addNoteCommand = vscode.commands.registerCommand('tasky.addNote', async function () {
-        // Prompt the user for the note name
-        const noteName = await vscode.window.showInputBox({
-            prompt: 'Enter the note name',
-            validateInput: (input) => {
-                // Validate that the note name is not empty
-                return input.trim() === '' ? 'Note name cannot be empty' : null;
+        try {
+            const noteTitle = await vscode.window.showInputBox({
+                prompt: 'Enter the note title (this will also be the filename)',
+                validateInput: (input) => {
+                    return input.trim() === '' ? 'Note title cannot be empty' : null;
+                }
+            });
+
+            if (!noteTitle) return;
+
+            const noteDescription = await vscode.window.showInputBox({
+                prompt: 'Enter the note description',
+                validateInput: (input) => {
+                    return input.trim() === '' ? 'Note description cannot be empty' : null;
+                }
+            });
+
+            if (!noteDescription) return;
+
+            const noteFilePath = path.join(notesDir, `${noteTitle}.json`);
+
+            // Check if the file already exists
+            if (fs.existsSync(noteFilePath)) {
+                vscode.window.showErrorMessage(`A note with the filename "${noteTitle}.json" already exists.`);
+                return;
             }
-        });
 
-        // If no note name was provided, exit the function
-        if (!noteName) {
-            return;
+            const newNote = {
+                id: uuidv4(),
+                title: noteTitle,
+                description: noteDescription,
+                notes: [
+                    {
+                        date: new Date().toISOString().split('T')[0], // Only the date part
+                        items: [
+                            {
+                                text: "What's for today?",
+                                completed: false,
+                                added_at: new Date().toISOString(),
+                                closed_at: null
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            // Save the note to a new JSON file
+            fs.writeFileSync(noteFilePath, JSON.stringify(newNote, null, 2), 'utf8');
+
+            openNotesWebview(context, newNote, noteTitle);
+        } catch (error) {
+            vscode.window.showErrorMessage(`An error occurred while adding a note: ${error.message}`);
         }
-
-        // Define the folder for storing notes
-        const notesFolderPath = path.join(context.globalStorageUri.fsPath, 'notes');
-
-        // Ensure the notes folder exists
-        if (!fs.existsSync(notesFolderPath)) {
-            fs.mkdirSync(notesFolderPath, { recursive: true });
-        }
-
-        // Define the path for the new note file
-        const noteFilePath = path.join(notesFolderPath, `${noteName}.md`);
-
-        // Check if a note with the same name already exists
-        if (fs.existsSync(noteFilePath)) {
-            vscode.window.showErrorMessage(`A note with the name "${noteName}" already exists.`);
-            return;
-        }
-
-        // Create the new note file with empty content
-        fs.writeFileSync(noteFilePath, '', 'utf8');
-        vscode.window.showInformationMessage(`Note "${noteName}" created successfully!`);
-
-        // Open the newly created note in the editor
-        const document = await vscode.workspace.openTextDocument(noteFilePath);
-        const editor = await vscode.window.showTextDocument(document);
-        
-        // Open the Markdown preview
-        vscode.commands.executeCommand('markdown.showPreviewToSide');
-
-        // Add current date heading and checkbox to the new note
-        await addCurrentDateHeading(editor);
     });
 
-    // Register the command "openNote"
+    // Command to open an existing note
     const openNoteCommand = vscode.commands.registerCommand('tasky.openNote', async function () {
-        // Define the folder for storing notes
-        const notesFolderPath = path.join(context.globalStorageUri.fsPath, 'notes');
+        try {
+            const noteFiles = fs.readdirSync(notesDir).filter(file => file.endsWith('.json'));
 
-        // Check if the notes folder exists
-        if (!fs.existsSync(notesFolderPath)) {
-            vscode.window.showInformationMessage('No notes found. Please create a note first.');
-            return;
+            if (noteFiles.length === 0) {
+                vscode.window.showInformationMessage('No notes found. Please create a note first.');
+                return;
+            }
+
+            const selectedNoteFile = await vscode.window.showQuickPick(noteFiles, {
+                placeHolder: 'Select a note to open'
+            });
+
+            if (!selectedNoteFile) return;
+
+            const noteFilePath = path.join(notesDir, selectedNoteFile);
+            const noteData = JSON.parse(fs.readFileSync(noteFilePath, 'utf8'));
+
+            // Check if the last note entry is today's date, otherwise add a new entry
+            const todayDate = new Date().toISOString().split('T')[0]; // Format to YYYY-MM-DD
+            const lastNote = noteData.notes[noteData.notes.length - 1];
+
+            if (!lastNote || lastNote.date !== todayDate) {
+                const newNoteEntry = {
+                    date: todayDate,
+                    items: [
+                        {
+                            text: "What's for today?",
+                            completed: false,
+                            added_at: new Date().toISOString(),
+                            closed_at: null
+                        }
+                    ]
+                };
+                noteData.notes.push(newNoteEntry);
+
+                // Save the updated notes back to the JSON file
+                fs.writeFileSync(noteFilePath, JSON.stringify(noteData, null, 2), 'utf8');
+            }
+
+            openNotesWebview(context, noteData, path.basename(selectedNoteFile, '.json'));
+        } catch (error) {
+            vscode.window.showErrorMessage(`An error occurred while opening a note: ${error.message}`);
         }
-
-        // Read all note files from the notes folder
-        const noteFiles = fs.readdirSync(notesFolderPath).filter(file => file.endsWith('.md'));
-
-        // If no notes are available, show a message
-        if (noteFiles.length === 0) {
-            vscode.window.showInformationMessage('No notes found. Please create a note first.');
-            return;
-        }
-
-        // Show a Quick Pick to select a note
-        const selectedNote = await vscode.window.showQuickPick(noteFiles, {
-            placeHolder: 'Select a note to open'
-        });
-
-        // If no note was selected, exit the function
-        if (!selectedNote) {
-            return;
-        }
-
-        // Define the path for the selected note file
-        const noteFilePath = path.join(notesFolderPath, selectedNote);
-
-        // Open the selected note in the editor
-        const document = await vscode.workspace.openTextDocument(noteFilePath);
-        const editor = await vscode.window.showTextDocument(document);
-
-        // Open the Markdown preview
-        vscode.commands.executeCommand('markdown.showPreviewToSide');
-
-        // Add current date heading if not present
-        await moveIncompleteChecklistsToCurrentDate(editor);
     });
 
     context.subscriptions.push(addNoteCommand);
     context.subscriptions.push(openNoteCommand);
 }
 
-// async function addCurrentDateHeading(editor) {
-//     const today = new Date();
-//     const formattedDate = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).format(today); // Format: 12 July 2024
-//     const dateHeading = `\n### ${formattedDate}\n`;
-//     const checkbox = `- [ ] What's for today?\n`;
-
-//     const document = editor.document;
-//     const text = document.getText();
-//     const lines = text.split('\n');
-
-//     let currentDateIndex = -1;
-
-//     // Find the index of the current date heading
-//     for (let i = 0; i < lines.length; i++) {
-//         if (lines[i].startsWith('### ')) {
-//             const headingDate = lines[i].substring(4).trim();
-//             if (headingDate === formattedDate) {
-//                 currentDateIndex = i;
-//                 break;
-//             }
-//         }
-//     }
-
-//     // Add current date heading and checkbox if not present
-//     if (currentDateIndex === -1) {
-//         const position = document.positionAt(text.length); // End of the document
-//         const edit = new vscode.WorkspaceEdit();
-//         edit.insert(document.uri, position, `\n${dateHeading}${checkbox}`);
-//         await vscode.workspace.applyEdit(edit);
-//     }
-
-//     // Move incomplete checklists from previous dates to the current date
-//     await moveIncompleteChecklistsToCurrentDate(editor);
-// }
-
-async function moveIncompleteChecklistsToCurrentDate(editor) {
-    const today = new Date();
-    const formattedDate = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).format(today); // Format: 12 July 2024
-    const dateHeading = `### ${formattedDate}\n`;
-    const checkbox = `- [ ] What's for today?\n`;
-
-    const document = editor.document;
-    let text = document.getText();
-    let lines = text.split('\n');
-
-    let currentDateIndex = -1;
-    let previousDateIndex = -1;
-    let incompleteChecklists = [];
-
-    // Find the index of the current date heading and previous date headings
-    for (let i = 0; i < lines.length; i++) {
-        if (lines[i].startsWith('### ')) {
-            const headingDate = lines[i].substring(4).trim();
-            if (headingDate === formattedDate) {
-                currentDateIndex = i;
-            } else {
-                previousDateIndex = i;
-            }
+// Function to open a note in a Webview
+function openNotesWebview(context, noteData, noteTitle) {
+    const panel = vscode.window.createWebviewPanel(
+        'noteManager',
+        `Note Manager - ${noteTitle}`,
+        vscode.ViewColumn.One,
+        {
+            enableScripts: true
         }
-    }
+    );
 
-    if (currentDateIndex === -1) {
-        // Insert the current date heading if not present
-        const position = document.positionAt(text.length); // End of the document
-        const edit = new vscode.WorkspaceEdit();
-        edit.insert(document.uri, position, `\n\n${dateHeading}${checkbox}`);
-        await vscode.workspace.applyEdit(edit);
+    // Generate the HTML content for the Webview
+    panel.webview.html = getWebviewContent(noteData);
 
-        // Re-fetch the document content after insertion
-        const updatedDocument = await vscode.workspace.openTextDocument(document.uri);
-        text = updatedDocument.getText();
-        lines = text.split('\n');
-    }
-
-    // Collect incomplete checklists from previous dates and remove them
-    if (previousDateIndex !== -1) {
-        for (let i = previousDateIndex + 1; i < lines.length; i++) {
-            if (lines[i].startsWith('### ')) {
-                break; // Stop if a new date heading is encountered
-            }
-            if (lines[i].startsWith('- [ ]')) {
-                incompleteChecklists.push(lines[i]);
-                lines[i] = ''; // Remove the checklist item from the original location
-            }
+    // Handle messages from the Webview
+    panel.webview.onDidReceiveMessage(message => {
+        switch (message.command) {
+            case 'toggleComplete':
+                toggleItemCompletion(noteData, message.noteIndex, message.itemIndex);
+                saveNoteData(context, noteData, noteTitle);
+                panel.webview.html = getWebviewContent(noteData); // Refresh the view
+                break;
+            case 'editItem':
+                editItem(noteData, message.noteIndex, message.itemIndex, message.newText);
+                saveNoteData(context, noteData, noteTitle);
+                break;
+            case 'addItem':
+                addItem(noteData, message.noteIndex);
+                saveNoteData(context, noteData, noteTitle);
+                panel.webview.html = getWebviewContent(noteData); // Refresh the view
+                break;
         }
-    }
-
-    // Ensure a blank line before the new heading if it does not already exist
-    if (!lines.includes(dateHeading.trim())) {
-        lines.push(dateHeading.trim());
-        lines.push(checkbox.trim());
-    } else {
-        // Add the incomplete checklists to the current date heading
-        const currentDateHeadingIndex = lines.indexOf(dateHeading.trim());
-        if (currentDateHeadingIndex !== -1) {
-            lines.splice(currentDateHeadingIndex + 1, 0, ...incompleteChecklists);
-        }
-    }
-
-    // Remove empty lines
-    lines = lines.filter(line => line.trim() !== '');
-
-    // Update the document content
-    const updatedText = lines.join('\n');
-    const edit = new vscode.WorkspaceEdit();
-    edit.replace(document.uri, new vscode.Range(0, 0, lines.length, 0), updatedText);
-    await vscode.workspace.applyEdit(edit);
-
-    // Save the document after updating
-    await document.save();
+    });
 }
 
+// Function to toggle completion status of a checklist item
+function toggleItemCompletion(noteData, noteIndex, itemIndex) {
+    const item = noteData.notes[noteIndex].items[itemIndex];
+    item.completed = !item.completed;
+    item.closed_at = item.completed ? new Date().toISOString() : null;
+}
 
+// Function to edit the text of a checklist item
+function editItem(noteData, noteIndex, itemIndex, newText) {
+    const item = noteData.notes[noteIndex].items[itemIndex];
+    item.text = newText;
+}
 
+// Function to add a new checklist item
+function addItem(noteData, noteIndex) {
+    const newItem = {
+        text: '',
+        completed: false,
+        added_at: new Date().toISOString(),
+        closed_at: null
+    };
+    noteData.notes[noteIndex].items.push(newItem);
+}
+
+// Function to save note data back to its JSON file
+function saveNoteData(context, noteData, noteTitle) {
+    const noteFilePath = path.join(context.globalStorageUri.fsPath, 'notes', `${noteTitle}.json`);
+    fs.writeFileSync(noteFilePath, JSON.stringify(noteData, null, 2), 'utf8');
+}
+
+// Function to generate HTML content for the Webview
+function getWebviewContent(noteData) {
+    const formatDate = (dateString) => {
+        const options = { day: 'numeric', month: 'long', year: 'numeric' };
+        return new Date(dateString).toLocaleDateString(undefined, options);
+    };
+
+    let notesHtml = noteData.notes.map((note, noteIndex) => `
+        <h3>${formatDate(note.date)}</h3>
+        <ul>
+            ${note.items.map((item, itemIndex) => `
+                <li style="display: flex; flex-direction: column; align-items: flex-start;">
+                    <input type="checkbox" ${item.completed ? 'checked' : ''} 
+                        onchange="toggleComplete(${noteIndex}, ${itemIndex})" 
+                        style="margin-right: 8px; margin-bottom: 4px;"> 
+                    <textarea 
+                        oninput="autoResize(this)" 
+                        onblur="editItem(${noteIndex}, ${itemIndex}, this.value)" 
+                        style="width: 100%; height: auto; resize: none; overflow: hidden; background: transparent; border: none; outline: none; color: white; margin-bottom: 4px;">
+                        ${item.text}
+                    </textarea>
+                    <div style="color: gray;">
+                        ${item.added_at ? `Added: ${formatDate(item.added_at)}<br>` : ''}
+                        ${item.closed_at ? `Closed: ${formatDate(item.closed_at)}` : ''}
+                    </div>
+                </li>
+            `).join('')}
+        </ul>
+        <button onclick="addItem(${noteIndex})">+ Add Item</button>
+    `).join('');
+
+    return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Note Manager</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 10px; }
+            h1 { font-size: 1.5em; }
+            p { font-size: 1em; color: #666; }
+            h3 { margin-top: 20px; font-size: 1.2em; }
+            ul { list-style-type: none; padding: 0; }
+            li { margin-bottom: 5px; display: flex; flex-direction: column; align-items: flex-start; }
+            textarea { 
+                width: 100%; 
+                height: auto; 
+                resize: none; 
+                overflow: hidden; 
+                background: transparent; 
+                border: none; 
+                outline: none; 
+                font-family: inherit;
+                font-size: inherit;
+                padding: 5px;
+                color: white; /* Text color */
+                margin-bottom: 4px;
+            }
+            button {
+                margin-top: 10px;
+                padding: 5px 10px;
+                border: none;
+                background-color: #007acc;
+                color: white;
+                cursor: pointer;
+                font-size: 14px;
+            }
+            button:hover {
+                background-color: #005f99;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>${noteData.title}</h1>
+        <p>${noteData.description}</p>
+        ${notesHtml}
+        <script>
+            const vscode = acquireVsCodeApi();
+
+            function toggleComplete(noteIndex, itemIndex) {
+                vscode.postMessage({
+                    command: 'toggleComplete',
+                    noteIndex: noteIndex,
+                    itemIndex: itemIndex
+                });
+            }
+
+            function editItem(noteIndex, itemIndex, newText) {
+                vscode.postMessage({
+                    command: 'editItem',
+                    noteIndex: noteIndex,
+                    itemIndex: itemIndex,
+                    newText: newText.trim()
+                });
+            }
+
+            function addItem(noteIndex) {
+                vscode.postMessage({
+                    command: 'addItem',
+                    noteIndex: noteIndex
+                });
+            }
+
+            function autoResize(textarea) {
+                textarea.style.height = 'auto';
+                textarea.style.height = (textarea.scrollHeight) + 'px';
+            }
+        </script>
+    </body>
+    </html>
+    `;
+}
+
+// Deactivate function (optional, typically empty)
 function deactivate() {}
 
 module.exports = {

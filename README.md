@@ -1,65 +1,56 @@
-# tasky README
+# Tasky
 
-This is the README for your extension "tasky". After writing up a brief description, we recommend including the following sections.
+Tasky is a lightweight VS Code extension for managing daily tasks and notes efficiently. It allows you to create, open, and manage notes stored in JSON files, complete with customizable checklist items.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **Create Notes**: Add new notes with titles, descriptions, and a default checklist item (`What's for today?`).
+- **Open Notes**: View and update existing notes in a Webview interface.
+- **Checklist Management**:
+  - Mark tasks as completed.
+  - Edit checklist items.
+  - Add new items or remove empty ones automatically.
+- **Daily Note Tracking**: Automatically creates a new entry for the current date if not already present.
 
-For example if there is an image subfolder under your extension project workspace:
-
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
-
-## Requirements
-
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
-
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
 
 ---
 
-## Working with Markdown
+## Requirements
 
-You can author your README using Visual Studio Code.  Here are some useful editor keyboard shortcuts:
+- **Node.js**: Required for running the extension and managing dependencies.
+- **VS Code**: Version 1.50 or higher.
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux)
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux)
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets
+---
+
+## Extension Settings
+
+This extension does not introduce new VS Code settings. However, your notes are stored in the `globalStorageUri` directory within your VS Code user data folder.
+
+---
+
+## Known Issues
+
+- No functionality to delete an entire note file yet (can be done manually by deleting the JSON file).
+- Limited styling in the Webview (future updates may enhance this).
+
+---
+
+## Release Notes
+
+### 1.0.0
+
+- Initial release.
+- Features:
+  - Create and open notes.
+  - Add, edit, and toggle checklist items.
+  - Auto-remove empty items on blur.
+  - Daily note tracking with date-based entries.
+
+---
 
 ## For more information
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+- [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
+- [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
 
-**Enjoy!**
+**Enjoy using Tasky for your daily task management!**

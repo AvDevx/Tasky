@@ -305,6 +305,18 @@ function getWebviewContent(noteData) {
 		)
 	}
 
+	// Highlight the text within square brackets with dynamic colors
+	const highlightBrackets = (text) => {
+		const regex = /\[(.*?)\]/g // Matches text inside []
+		return text.replace(regex, (match, p1) => {
+			// Generate a dynamic color based on the length of the text inside []
+			const length = p1.length
+			const hue = (length * 30) % 360 // Rotate hue based on length
+			const color = `hsl(${hue}, 70%, 50%)` // Dynamic HSL color
+			return `<span class="highlight" style="color: ${color};">${match}</span>`
+		})
+	}
+
 	let notesHtml = noteData.notes
 		.map((note, noteIndex) => {
 			return `
@@ -330,7 +342,7 @@ function getWebviewContent(noteData) {
                             class="item-text ${
 					item.completed ? "completed" : ""
 				}"
-                        >${item.text}</div>
+                        >${highlightBrackets(item.text)}</div>
                     </div>
                     <div style="color: gray; padding-left:30px">
                         ${
@@ -426,6 +438,10 @@ function getWebviewContent(noteData) {
             .custom-checkbox input:checked + .checkmark {
                 background-color: #007acc; /* Change color when checked */
             }
+            /* Highlight Styling */
+            .highlight {
+                font-weight: bold;
+            }
             /* Completed Item Styling */
             .item-text.completed {
                 text-decoration: line-through; /* Strike-through effect */
@@ -458,7 +474,6 @@ function getWebviewContent(noteData) {
                     return;
                 }
                 const newText = itemDiv.innerText.trim();
-
                 if (newText === '') {
                     // If the text is empty, send a message to remove the item
                     vscode.postMessage({
@@ -467,7 +482,6 @@ function getWebviewContent(noteData) {
                         itemIndex: itemIndex
                     });
                 } else {
-                    // Otherwise, save the updated text
                     vscode.postMessage({
                         command: 'editItem',
                         noteIndex: noteIndex,
@@ -476,7 +490,6 @@ function getWebviewContent(noteData) {
                     });
                 }
             }
-
 
             function addItem(noteIndex) {
                 vscode.postMessage({

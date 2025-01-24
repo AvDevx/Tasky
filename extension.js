@@ -96,7 +96,48 @@ function activate(context) {
 		}
 	)
 
-	// Command to open an existing note
+	// Function to move incomplete tasks from previous days to today
+	function moveIncompleteTasksToToday(noteData) {
+		const todayDate = new Date().toISOString().split("T")[0] // Format to YYYY-MM-DD
+		const newTodayEntry = noteData.notes.find(
+			(note) => note.date === todayDate
+		) || {
+			date: todayDate,
+			items: [],
+		}
+
+		noteData.notes.forEach((note) => {
+			if (note.date !== todayDate) {
+				// Find incomplete tasks
+				const incompleteTasks = note.items.filter(
+					(item) => !item.completed
+				)
+				// Add them to today's entry
+				newTodayEntry.items.push(
+					...incompleteTasks.map((item) => ({
+						...item,
+						added_at: new Date().toISOString(), // Update added_at to today
+					}))
+				)
+				// Remove incomplete tasks from the previous day
+				note.items = note.items.filter(
+					(item) => item.completed
+				)
+			}
+		})
+
+		// If today’s entry doesn’t already exist, add it
+		if (!noteData.notes.find((note) => note.date === todayDate)) {
+			noteData.notes.push(newTodayEntry)
+		}
+
+		// Clean up empty entries from past dates
+		noteData.notes = noteData.notes.filter(
+			(note) => note.items.length > 0
+		)
+	}
+
+	// Update the openNoteCommand to call moveIncompleteTasksToToday
 	const openNoteCommand = vscode.commands.registerCommand(
 		"tasky.openNote",
 		async function () {
@@ -133,37 +174,8 @@ function activate(context) {
 					fs.readFileSync(noteFilePath, "utf8")
 				)
 
-				// Check if the last note entry is today's date, otherwise add a new entry
-				const todayDate = new Date()
-					.toISOString()
-					.split("T")[0] // Format to YYYY-MM-DD
-				const lastNote =
-					noteData.notes[
-						noteData.notes.length - 1
-					]
-
-				if (!lastNote || lastNote.date !== todayDate) {
-					const newNoteEntry = {
-						date: todayDate,
-						items: [
-							{
-								text: "What's for today?",
-								completed: false,
-								added_at: new Date().toISOString(),
-								closed_at: null,
-							},
-						],
-					}
-					noteData.notes.push(newNoteEntry)
-				}
-
-				// Remove any items with empty text
-				noteData.notes.forEach((note) => {
-					note.items = note.items.filter(
-						(item) =>
-							item.text.trim() !== ""
-					)
-				})
+				// Move incomplete tasks to today
+				moveIncompleteTasksToToday(noteData)
 
 				// Save the updated notes back to the JSON file
 				fs.writeFileSync(
@@ -189,8 +201,53 @@ function activate(context) {
 	context.subscriptions.push(openNoteCommand)
 }
 
+// Function to move incomplete tasks from previous days to today
+function moveIncompleteTasksToToday(noteData) {
+	const todayDate = new Date().toISOString().split("T")[0] // Format to YYYY-MM-DD
+	let todayEntry = noteData.notes.find((note) => note.date === todayDate)
+
+	// If no entry for today exists, create a new one
+	if (!todayEntry) {
+		todayEntry = {
+			date: todayDate,
+			items: [],
+		}
+		noteData.notes.push(todayEntry)
+	}
+
+	// Loop through all notes and collect incomplete tasks
+	noteData.notes.forEach((note) => {
+		if (note.date !== todayDate) {
+			// Find incomplete tasks
+			const incompleteTasks = note.items.filter(
+				(item) => !item.completed
+			)
+
+			// Move them to today's entry
+			todayEntry.items.push(
+				...incompleteTasks.map((item) => ({
+					...item,
+					added_at: new Date().toISOString(), // Update added_at to today
+				}))
+			)
+
+			// Remove incomplete tasks from the original date
+			note.items = note.items.filter((item) => item.completed)
+		}
+	})
+
+	// Clean up notes with no items
+	noteData.notes = noteData.notes.filter((note) => note.items.length > 0)
+}
+
 // Function to open a note in a Webview
 function openNotesWebview(context, noteData, noteTitle) {
+	// Move incomplete tasks to today
+	moveIncompleteTasksToToday(noteData)
+
+	// Save the updated note data back to its JSON file after moving tasks
+	saveNoteData(context, noteData, noteTitle)
+
 	const panel = vscode.window.createWebviewPanel(
 		"noteManager",
 		`Note Manager: ${noteTitle}`,

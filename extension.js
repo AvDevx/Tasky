@@ -366,7 +366,6 @@ function getWebviewContent(noteData) {
 	const highlightBrackets = (text) => {
 		const regex = /\[(.*?)\]/g // Matches text inside []
 		return text.replace(regex, (match, p1) => {
-			// Generate a dynamic color based on the length of the text inside []
 			const length = p1.length
 			const hue = (length * 30) % 360 // Rotate hue based on length
 			const color = `hsl(${hue}, 70%, 50%)` // Dynamic HSL color
@@ -374,8 +373,12 @@ function getWebviewContent(noteData) {
 		})
 	}
 
+	const todayDate = new Date().toISOString().split("T")[0] // Current date in YYYY-MM-DD format
+
 	let notesHtml = noteData.notes
 		.map((note, noteIndex) => {
+			const isToday = note.date === todayDate // Check if the note is for today
+
 			return `
         <h3>${formatDate(note.date)}</h3>
         <ul>
@@ -420,7 +423,11 @@ function getWebviewContent(noteData) {
 			})
 			.join("")}
         </ul>
-        <button onclick="addItem(${noteIndex})">+ Add Item</button>
+        ${
+		isToday
+			? `<button onclick="addItem(${noteIndex})">+ Add Item</button>`
+			: ""
+	}
         `
 		})
 		.join("")

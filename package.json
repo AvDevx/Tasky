@@ -15,11 +15,15 @@
     "commands": [
       {
         "command": "tasky.addNote",
-        "title": "Add Note"
+        "title": "Tasky: Add Note"
       },
       {
         "command": "tasky.openNote",
-        "title": "Open Note"
+        "title": "Tasky: Open Note"
+      },
+      {
+        "command": "tasky.addTask",
+        "title": "Tasky: Add Task"
       }
     ]
   },

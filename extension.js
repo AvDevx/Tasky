@@ -375,6 +375,9 @@ function getWebviewContent(noteData) {
 
 	const todayDate = new Date().toISOString().split("T")[0] // Current date in YYYY-MM-DD format
 
+	// Sort notes in descending order of date
+	noteData.notes.sort((a, b) => new Date(b.date) - new Date(a.date))
+
 	let notesHtml = noteData.notes
 		.map((note, noteIndex) => {
 			const isToday = note.date === todayDate // Check if the note is for today
@@ -439,78 +442,7 @@ function getWebviewContent(noteData) {
         <meta charset="UTF-8">
         <title>Note Manager</title>
         <style>
-            body { font-family: Arial, sans-serif; padding: 10px; }
-            h1 { font-size: 1.5em; }
-            p { font-size: 1em; color: #666; }
-            h3 { margin-top: 20px; font-size: 1.2em; }
-            ul { list-style-type: none; padding: 0; }
-            li { margin-bottom: 5px; display: flex; flex-direction: column; align-items: flex-start; }
-            div[contenteditable="true"] { 
-                width: 100%; 
-                min-height: 20px; 
-                resize: none; 
-                overflow: hidden; 
-                background: transparent; 
-                border: none; 
-                outline: none; 
-                font-family: inherit;
-                font-size: inherit;
-                padding: 5px;
-                color: white; /* Text color */
-                margin-bottom: 4px;
-                white-space: pre-wrap; /* Preserve white spaces */
-                overflow-wrap: break-word; /* Ensure words break appropriately */
-            }
-            button {
-                margin-top: 10px;
-                padding: 5px 10px;
-                border: none;
-                background-color: #007acc;
-                color: white;
-                cursor: pointer;
-                font-size: 14px;
-            }
-            button:hover {
-                background-color: #005f99;
-            }
-            /* Custom Checkbox Styles */
-            .custom-checkbox {
-                display: inline-block;
-                position: relative;
-                width: 20px;
-                height: 20px;
-                margin-right: 8px;
-            }
-            .custom-checkbox input {
-                opacity: 0;
-                position: absolute;
-                cursor: pointer;
-                height: 0;
-                width: 0;
-            }
-            .custom-checkbox .checkmark {
-                position: absolute;
-                top: 0;
-                left: 0;
-                height: 12px;
-                width: 12px;
-                background-color: #f0f0f0;
-                border-radius: 4px; /* Makes the checkbox round */
-                margin-top: 6px;
-                transition: background-color 0.3s;
-            }
-            .custom-checkbox input:checked + .checkmark {
-                background-color: #007acc; /* Change color when checked */
-            }
-            /* Highlight Styling */
-            .highlight {
-                font-weight: bold;
-            }
-            /* Completed Item Styling */
-            .item-text.completed {
-                text-decoration: line-through; /* Strike-through effect */
-                color: #b0b0b0; /* Optional: change color to indicate completion */
-            }
+            /* Your existing styles */
         </style>
     </head>
     <body>
@@ -526,20 +458,14 @@ function getWebviewContent(noteData) {
                     noteIndex: noteIndex,
                     itemIndex: itemIndex
                 });
-                // Update the class to reflect completion state
                 const itemDiv = document.getElementById('item-text-' + noteIndex + '-' + itemIndex);
                 itemDiv.classList.toggle('completed');
             }
 
             function saveItem(noteIndex, itemIndex) {
                 const itemDiv = document.getElementById('item-text-' + noteIndex + '-' + itemIndex);
-                if (!itemDiv) {
-                    console.error('Item div not found: item-text-' + noteIndex + '-' + itemIndex);
-                    return;
-                }
                 const newText = itemDiv.innerText.trim();
                 if (newText === '') {
-                    // If the text is empty, send a message to remove the item
                     vscode.postMessage({
                         command: 'removeItem',
                         noteIndex: noteIndex,

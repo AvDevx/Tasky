@@ -2,7 +2,7 @@
   "name": "tasky",
   "displayName": "tasky",
   "description": "A todo list for distributed projects",
-  "version": "0.0.5",
+  "version": "0.5.0",
   "engines": {
     "vscode": "^1.92.0"
   },
